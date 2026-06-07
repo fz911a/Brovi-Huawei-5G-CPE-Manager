@@ -1,6 +1,0 @@
-﻿"step","mode","http","code","response","error","elapsed_ms","preview"
-"baseline_get","atport-status","200","","","","0","<?xml version=""1.0"" encoding=""UTF-8""?><response><enable>1</enable></response>"
-"capki_upload","frontend_exact","405","","","","15",""
-"capki_upload","csrf_plus_header","0","","","You cannot call a method on a null-valued expression.","15",""
-"capki_upload","header_only","0","","","You cannot call a method on a null-valued expression.","4",""
-"capki_upload","csrf_only_refresh","0","","","You cannot call a method on a null-valued expression.","4",""

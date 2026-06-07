@@ -1,6 +1,0 @@
-﻿"step","mode","http","code","response","error","elapsed_ms","preview"
-"baseline_get","atport-status","200","","","","0","<?xml version=""1.0"" encoding=""UTF-8""?><response><enable>1</enable></response>"
-"capki_upload","frontend_exact","0","","","phase=post | Exception calling ""GetResult"" with ""0"" argument(s): ""An error occurred while sending the request."" | inner: An error occurred while sending the request.","12",""
-"capki_upload","csrf_plus_header","0","","","phase=post | Exception calling ""GetResult"" with ""0"" argument(s): ""An error occurred while sending the request."" | inner: An error occurred while sending the request.","4",""
-"capki_upload","header_only","0","","","phase=post | Exception calling ""GetResult"" with ""0"" argument(s): ""An error occurred while sending the request."" | inner: An error occurred while sending the request.","2",""
-"capki_upload","csrf_only_refresh","0","","","phase=post | Exception calling ""GetResult"" with ""0"" argument(s): ""An error occurred while sending the request."" | inner: An error occurred while sending the request.","3",""

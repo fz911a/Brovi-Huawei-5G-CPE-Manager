@@ -1,7 +1,0 @@
-﻿{
-    "poll_count":  20,
-    "poll_interval_seconds":  2,
-    "poll_csv":  "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\tmp_api_probe_auth_plus\\poll_table_auth_plus.csv",
-    "dev_csv":  "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\tmp_api_probe_auth_plus\\developer_log_probe_auth_plus.csv",
-    "out_dir":  "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\tmp_api_probe_auth_plus"
-}
