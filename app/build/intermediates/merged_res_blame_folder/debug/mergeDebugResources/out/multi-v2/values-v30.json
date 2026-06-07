@@ -1,0 +1,19 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.cpemanager.app-mergeDebugResources-49:/values-v30/values-v30.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\zqimi\\.gradle\\caches\\8.13\\transforms\\871d6e10da3e7b5878efd8559cf8026a\\transformed\\material3-release\\res\\values-v30\\values-v30.xml",
+                    "from": {
+                        "startLines": "2",
+                        "startColumns": "4",
+                        "startOffsets": "55",
+                        "endColumns": "72",
+                        "endOffsets": "123"
+                    }
+                }
+            ]
+        }
+    ]
+}

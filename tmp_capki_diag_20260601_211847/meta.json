@@ -1,0 +1,11 @@
+﻿{
+    "base_url":  "http://10.0.0.1",
+    "cert_path":  "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\tmp_capki_diag_20260601_211847\\dummy_offline_cert.txt",
+    "cert_size":  125,
+    "out_dir":  "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\tmp_capki_diag_20260601_211847",
+    "csv":  "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\tmp_capki_diag_20260601_211847\\capki_upload_diag.csv",
+    "success_modes":  [
+
+                      ],
+    "generated_at":  "2026-06-01 21:18:48"
+}

@@ -1,0 +1,6 @@
+CAPKI-DIAG-DUMMY
+time=
+2026-06-01 21:16:05
+host=
+FZ911
+note=this is a dummy offline cert file for endpoint diagnostics
