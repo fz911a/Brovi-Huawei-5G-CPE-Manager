@@ -318,6 +318,23 @@ class CpeRepository {
         )
     }
 
+    suspend fun requestLatencyProbe(targetUrl: String): Result<Boolean> {
+        val serviceRaw = HuaweiCpeClient.getDiagnoseWanServiceName().getOrDefault(emptyMap())
+        val serviceName = serviceRaw.values.firstOrNull { it.isNotBlank() }?.trim().orEmpty()
+        val host = normalizeLatencyTarget(targetUrl)
+        val params = buildMap {
+            if (serviceName.isNotBlank()) {
+                put("ServiceName", serviceName)
+            }
+            if (host.isNotBlank()) {
+                put("Host", host)
+            }
+            put("Timeout", "4000")
+            put("DiagnosticsState", "Requested")
+        }
+        return HuaweiCpeClient.requestDiagnosePing(params).map { true }
+    }
+
     suspend fun pingDevice(): Result<Boolean> = HuaweiCpeClient.ping()
 
     /**
@@ -1327,10 +1344,17 @@ class CpeRepository {
             "AverageResponseTime",
             "averageRtt",
             "AverageRtt",
-            "ResponseTime"
+            "AverageLatency",
+            "averageLatency",
+            "AvgResponseTime",
+            "avgRtt",
+            "avgLatency",
+            "ResponseTime",
+            "latency",
+            "rtt"
         )?.coerceAtLeast(0.0) ?: 0.0
 
-        val jitterDirect = findMapNumber(source, "Jitter", "jitter")
+        val jitterDirect = findMapNumber(source, "Jitter", "jitter", "AverageJitter", "averageJitter")
         val minRtt = findMapNumber(source, "MinimumResponseTime", "MinResponseTime", "minRtt")
         val maxRtt = findMapNumber(source, "MaximumResponseTime", "MaxResponseTime", "maxRtt")
         val jitter = (
@@ -1339,15 +1363,29 @@ class CpeRepository {
                 ?: 0.0
             ).coerceAtLeast(0.0)
 
-        val successCount = findMapNumber(source, "SuccessCount", "successCount", "SuccCount")
-        val failureCount = findMapNumber(source, "FailureCount", "failureCount", "FailCount")
-        val repetitionCount = findMapNumber(source, "NumberOfRepetitions", "SendCount", "TotalCount")
+        val lossRateDirect = findMapNumber(
+            source,
+            "PacketLoss",
+            "packetLoss",
+            "PacketLossRate",
+            "packetLossRate",
+            "LossRate",
+            "lossRate"
+        )
+
+        val successCount = findMapNumber(source, "SuccessCount", "successCount", "SuccCount", "Success")
+        val failureCount = findMapNumber(source, "FailureCount", "failureCount", "FailCount", "FailedCount")
+        val repetitionCount = findMapNumber(source, "NumberOfRepetitions", "SendCount", "TotalCount", "Count")
         val total = when {
             successCount != null && failureCount != null -> successCount + failureCount
             repetitionCount != null -> repetitionCount
             else -> null
         }
         val packetLoss = when {
+            lossRateDirect != null -> {
+                if (lossRateDirect <= 1.0) (lossRateDirect * 100.0).coerceIn(0.0, 100.0)
+                else lossRateDirect.coerceIn(0.0, 100.0)
+            }
             total != null && total > 0 && successCount != null ->
                 ((total - successCount) / total * 100.0).coerceIn(0.0, 100.0)
             total != null && total > 0 && failureCount != null ->
@@ -1381,6 +1419,25 @@ class CpeRepository {
         if (raw.isNullOrBlank()) return null
         val match = Regex("""-?\d+(?:\.\d+)?""").find(raw) ?: return null
         return match.value.toDoubleOrNull()
+    }
+
+    private fun normalizeLatencyTarget(target: String): String {
+        val trimmed = target.trim()
+        if (trimmed.isBlank()) return ""
+
+        val uriHost = runCatching { URI(trimmed).host.orEmpty() }.getOrDefault("")
+        val hostCandidate = when {
+            uriHost.isNotBlank() -> uriHost
+            trimmed.contains("://") -> trimmed.substringAfter("://")
+            else -> trimmed
+        }
+
+        return hostCandidate
+            .substringBefore("/")
+            .substringBefore("?")
+            .substringBefore("#")
+            .substringBefore(":")
+            .trim()
     }
 
     private fun parseBytes(value: String?): Long? {

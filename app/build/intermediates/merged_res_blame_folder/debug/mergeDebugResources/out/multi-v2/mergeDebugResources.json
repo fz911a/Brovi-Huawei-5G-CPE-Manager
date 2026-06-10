@@ -5524,6 +5524,23 @@
                     }
                 },
                 {
+                    "source": "C:\\Users\\zqimi\\OneDrive\\Desktop\\git\\Brovi-Huawei-5G-CPE-Manager\\app\\src\\main\\res\\values\\strings.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "16",
+                        "endColumns": "48",
+                        "endOffsets": "60"
+                    },
+                    "to": {
+                        "startLines": "101",
+                        "startColumns": "4",
+                        "startOffsets": "6159",
+                        "endColumns": "48",
+                        "endOffsets": "6203"
+                    }
+                },
+                {
                     "source": "C:\\Users\\zqimi\\.gradle\\caches\\8.13\\transforms\\04ace535ab55a70532cfc538673168db\\transformed\\foundation-release\\res\\values\\values.xml",
                     "from": {
                         "startLines": "2,3",
@@ -5538,6 +5555,25 @@
                         "startOffsets": "12254,12310",
                         "endColumns": "55,54",
                         "endOffsets": "12305,12360"
+                    }
+                },
+                {
+                    "source": "C:\\Users\\zqimi\\OneDrive\\Desktop\\git\\Brovi-Huawei-5G-CPE-Manager\\app\\src\\main\\res\\values\\styles.xml",
+                    "from": {
+                        "startLines": "1",
+                        "startColumns": "4",
+                        "startOffsets": "16",
+                        "endLines": "6",
+                        "endColumns": "12",
+                        "endOffsets": "344"
+                    },
+                    "to": {
+                        "startLines": "191",
+                        "startColumns": "4",
+                        "startOffsets": "12365",
+                        "endLines": "196",
+                        "endColumns": "12",
+                        "endOffsets": "12693"
                     }
                 },
                 {
@@ -5576,25 +5612,6 @@
                         "endLines": "98,116,117,118,119,120,121,122,123,124,127,128,129,130,131,132,133,134,135,136,137,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,209,212",
                         "endColumns": "72,87,85,80,83,68,64,82,105,85,13,53,68,60,68,88,94,73,96,92,97,13,90,87,95,97,63,67,86,93,66,71,71,100,108,75,68,47,65,63,73,56,56,71,49,53,70,70,69,68,57,75,70,73,85,49,69,64,12,12",
                         "endOffsets": "6001,7258,7344,7425,7509,7578,7643,7726,7832,7918,8038,8092,8161,8222,8291,8380,8475,8549,8646,8739,8837,8986,9077,9165,9261,9359,9423,9491,9578,9672,9739,9811,9883,9984,10093,10169,10238,10286,10352,10416,10490,10547,10604,10676,10726,10780,10851,10922,10992,11061,11119,11195,11266,11340,11426,11476,11546,11611,13520,13673"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\app\\src\\main\\res\\values\\styles.xml",
-                    "from": {
-                        "startLines": "1",
-                        "startColumns": "4",
-                        "startOffsets": "16",
-                        "endLines": "6",
-                        "endColumns": "12",
-                        "endOffsets": "344"
-                    },
-                    "to": {
-                        "startLines": "191",
-                        "startColumns": "4",
-                        "startOffsets": "12365",
-                        "endLines": "196",
-                        "endColumns": "12",
-                        "endOffsets": "12693"
                     }
                 },
                 {
@@ -5646,23 +5663,6 @@
                         "startOffsets": "5776",
                         "endColumns": "53",
                         "endOffsets": "5825"
-                    }
-                },
-                {
-                    "source": "C:\\Users\\zqimi\\OneDrive\\Desktop\\CPE Manager\\app\\src\\main\\res\\values\\strings.xml",
-                    "from": {
-                        "startLines": "1",
-                        "startColumns": "4",
-                        "startOffsets": "16",
-                        "endColumns": "48",
-                        "endOffsets": "60"
-                    },
-                    "to": {
-                        "startLines": "101",
-                        "startColumns": "4",
-                        "startOffsets": "6159",
-                        "endColumns": "48",
-                        "endOffsets": "6203"
                     }
                 }
             ]

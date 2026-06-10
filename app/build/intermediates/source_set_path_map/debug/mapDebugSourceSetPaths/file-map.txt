@@ -45,11 +45,11 @@ com.cpemanager.app-datastore-release-43 C:\Users\zqimi\.gradle\caches\8.13\trans
 com.cpemanager.app-tracing-1.2.0-44 C:\Users\zqimi\.gradle\caches\8.13\transforms\f7e85cf793db0f99436774a14b344901\transformed\tracing-1.2.0\res
 com.cpemanager.app-annotation-experimental-1.4.1-45 C:\Users\zqimi\.gradle\caches\8.13\transforms\fb522aa8e276102a82a7dc23e81292dc\transformed\annotation-experimental-1.4.1\res
 com.cpemanager.app-ui-tooling-data-release-46 C:\Users\zqimi\.gradle\caches\8.13\transforms\fcfb7b8a748bbdfda8e31d904f8241fb\transformed\ui-tooling-data-release\res
-com.cpemanager.app-pngs-47 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\build\generated\res\pngs\debug
-com.cpemanager.app-resValues-48 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\build\generated\res\resValues\debug
-com.cpemanager.app-updated_navigation_xml-49 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\build\generated\updated_navigation_xml\debug
-com.cpemanager.app-packageDebugResources-50 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
-com.cpemanager.app-packageDebugResources-51 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
-com.cpemanager.app-debug-52 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\build\intermediates\merged_res\debug\mergeDebugResources
-com.cpemanager.app-debug-53 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\src\debug\res
-com.cpemanager.app-main-54 C:\Users\zqimi\OneDrive\Desktop\CPE Manager\app\src\main\res
+com.cpemanager.app-pngs-47 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\build\generated\res\pngs\debug
+com.cpemanager.app-resValues-48 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\build\generated\res\resValues\debug
+com.cpemanager.app-updated_navigation_xml-49 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\build\generated\updated_navigation_xml\debug
+com.cpemanager.app-packageDebugResources-50 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\build\intermediates\incremental\debug\packageDebugResources\merged.dir
+com.cpemanager.app-packageDebugResources-51 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\build\intermediates\incremental\debug\packageDebugResources\stripped.dir
+com.cpemanager.app-debug-52 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\build\intermediates\merged_res\debug\mergeDebugResources
+com.cpemanager.app-debug-53 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\src\debug\res
+com.cpemanager.app-main-54 C:\Users\zqimi\OneDrive\Desktop\git\Brovi-Huawei-5G-CPE-Manager\app\src\main\res

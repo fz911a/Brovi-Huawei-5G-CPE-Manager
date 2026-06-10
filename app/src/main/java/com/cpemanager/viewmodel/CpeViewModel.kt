@@ -22,6 +22,9 @@ import com.cpemanager.network.HuaweiCpeClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -31,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import okhttp3.RequestBody.Companion.toRequestBody
 
 data class CpeUiState(
     val pccInfo: PccInfo = PccInfo(),
@@ -535,74 +539,244 @@ class CpeViewModel(app: Application) : AndroidViewModel(app) {
         speedThreadCount = count.coerceIn(1, 64)
     }
 
-    fun runSpeedTest() {
-        // 闃叉閲嶅鍚姩
-        if (_uiState.value.isLoading) return
+    fun refreshDashboard() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
+            refreshAll()
+        }
+    }
 
-            val state = _uiState.value
-            val latencyUrl = state.latencyTestUrl.ifBlank { "https://www.gstatic.com/generate_204" }
-            val speedUrl = state.speedTestUrl.ifBlank { "https://speed.cloudflare.com/__down?bytes=10485760" }
+    private data class LatencyProbeResult(
+        val latencyMs: Double,
+        val jitterMs: Double,
+        val packetLossPct: Double,
+        val samples: List<Double>,
+        val source: String
+    )
 
-            // 重置测速状态
-            _uiState.update { s ->
-                s.copy(speedInfo = s.speedInfo.copy(
-                    download = 0.0, upload = 0.0, latency = 0.0, jitter = 0.0, packetLoss = 0.0,
-                    latencySeries = emptyList(), downloadSeries = emptyList(), uploadSeries = emptyList(),
-                    currentDownload = "", currentUpload = "", currentTotal = ""
-                ))
+    private data class ThroughputPhaseResult(
+        val finalSpeedMbps: Double,
+        val totalBytes: Long,
+        val elapsedSeconds: Double
+    )
+
+    private fun deriveUploadTestUrl(speedUrl: String): String {
+        val trimmed = speedUrl.trim()
+        if (trimmed.isBlank()) return "https://speed.cloudflare.com/__up?bytes=10485760"
+        return when {
+            trimmed.contains("__down", ignoreCase = true) ->
+                trimmed.replace("__down", "__up", ignoreCase = true)
+            trimmed.contains("download", ignoreCase = true) ->
+                trimmed.replace("download", "upload", ignoreCase = true)
+            trimmed.contains("/down", ignoreCase = true) ->
+                trimmed.replace("/down", "/up", ignoreCase = true)
+            else -> trimmed
+        }
+    }
+
+    private suspend fun measureDeviceLatency(
+        latencyUrl: String,
+        settleRounds: Int = 5
+    ): LatencyProbeResult? {
+        val requestResult = repository.requestLatencyProbe(latencyUrl)
+        if (requestResult.isFailure) {
+            android.util.Log.w(
+                "CpeVM",
+                "diagnose_ping request failed: ${requestResult.exceptionOrNull()?.message.orEmpty()}"
+            )
+            return null
+        }
+
+        repeat(settleRounds.coerceAtLeast(1)) {
+            val deviceSpeed = runCatching { repository.getSpeedInfo().getOrNull() }.getOrNull()
+            if (deviceSpeed != null && deviceSpeed.latency > 0.0) {
+                android.util.Log.d("CpeVM", "latency probe using device diagnostic: ${deviceSpeed.latency} ms")
+                return LatencyProbeResult(
+                    latencyMs = deviceSpeed.latency,
+                    jitterMs = deviceSpeed.jitter,
+                    packetLossPct = deviceSpeed.packetLoss,
+                    samples = listOf(deviceSpeed.latency),
+                    source = "device"
+                )
             }
+            delay(700)
+        }
 
-            // ---- 闃舵 1: 寤惰繜娴嬭瘯锛? 娆?HEAD锛?----
-            val latencyResults = mutableListOf<Double>()
-            val pingClient = okhttp3.OkHttpClient.Builder()
-                .connectTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-                .readTimeout(3, java.util.concurrent.TimeUnit.SECONDS)
-                .build()
-            repeat(5) {
-                runCatching {
-                    val req = okhttp3.Request.Builder().url(latencyUrl).head().build()
-                    val start = System.nanoTime()
-                    pingClient.newCall(req).execute().use { resp ->
-                        if (resp.isSuccessful) {
-                            val elapsed = (System.nanoTime() - start) / 1_000_000.0
-                            if (elapsed < 2000) latencyResults.add(elapsed)
-                        }
+        return null
+    }
+
+    private suspend fun measureHttpLatency(
+        latencyUrl: String,
+        sampleCount: Int = 3
+    ): LatencyProbeResult? {
+        val deviceSpeed = runCatching { repository.getSpeedInfo().getOrNull() }.getOrNull()
+        if (deviceSpeed != null && deviceSpeed.latency > 0.0) {
+            android.util.Log.d("CpeVM", "latency probe using device metric: ${deviceSpeed.latency} ms")
+            return LatencyProbeResult(
+                latencyMs = deviceSpeed.latency,
+                jitterMs = deviceSpeed.jitter,
+                packetLossPct = deviceSpeed.packetLoss,
+                samples = listOf(deviceSpeed.latency),
+                source = "device"
+            )
+        }
+
+        val samples = mutableListOf<Double>()
+        val client = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(2, TimeUnit.SECONDS)
+            .readTimeout(2, TimeUnit.SECONDS)
+            .build()
+
+        repeat(sampleCount.coerceAtLeast(1)) {
+            runCatching {
+                val request = okhttp3.Request.Builder()
+                    .url(latencyUrl)
+                    .get()
+                    .header("Cache-Control", "no-cache, no-store, max-age=0")
+                    .header("Pragma", "no-cache")
+                    .build()
+
+                val start = System.nanoTime()
+                client.newCall(request).execute().use { response ->
+                    if (response.code !in 200..399) return@runCatching
+                    val elapsedMs = (System.nanoTime() - start) / 1_000_000.0
+                    if (elapsedMs.isFinite() && elapsedMs >= 0.0) {
+                        samples.add(elapsedMs)
                     }
                 }
-                delay(200)
             }
+            delay(120)
+        }
 
-            val avgLatency = if (latencyResults.isNotEmpty()) latencyResults.average() else 0.0
-            val jitter = if (latencyResults.size >= 2)
-                latencyResults.zipWithNext { a, b -> kotlin.math.abs(a - b) }.average()
-            else 0.0
-            val packetLoss = if (latencyResults.size < 5) (5 - latencyResults.size) * 20.0 else 0.0
+        if (samples.isEmpty()) return null
 
-            // ---- 闃舵 2: 澶氱嚎绋嬪苟鍙戜笅杞斤紙浠?net.netart.cn锛?----
-            val startTime = System.nanoTime()
-            val bytesAtomic = java.util.concurrent.atomic.AtomicLong(0)
-            val running = java.util.concurrent.atomic.AtomicBoolean(true)
-            val maxBytes = 100_000_000L // 100MB 鎬婚噺涓婇檺
-            val speedHistory = mutableListOf<Double>() // 姣忕閲囨牱
+        val latency = samples.average()
+        val jitter = if (samples.size >= 2) {
+            samples.zipWithNext { a, b -> kotlin.math.abs(a - b) }.average()
+        } else 0.0
+        val packetLoss = ((sampleCount - samples.size).coerceAtLeast(0) * 100.0 / sampleCount.coerceAtLeast(1))
+            .coerceIn(0.0, 100.0)
 
-            // 启动 N 个下载线程
-            val downloadJobs = (0 until speedThreadCount).map { threadId ->
-                launch(kotlinx.coroutines.Dispatchers.IO) {
-                    while (running.get() && bytesAtomic.get() < maxBytes) {
-                        runCatching {
-                            val req = okhttp3.Request.Builder().url(speedUrl).build()
-                            val client = okhttp3.OkHttpClient.Builder()
-                                .connectTimeout(8, java.util.concurrent.TimeUnit.SECONDS)
-                                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+        return LatencyProbeResult(
+            latencyMs = latency,
+            jitterMs = jitter,
+            packetLossPct = packetLoss,
+            samples = samples,
+            source = "http"
+        )
+    }
+
+    private suspend fun probeLatency(
+        latencyUrl: String,
+        sampleCount: Int = 3
+    ): LatencyProbeResult? {
+        measureDeviceLatency(latencyUrl)?.let { return it }
+
+        val candidates = buildList {
+            val primary = latencyUrl.trim()
+            if (primary.isNotBlank()) add(primary)
+
+            val fallback204 = "https://www.gstatic.com/generate_204"
+            if (none { it.equals(fallback204, ignoreCase = true) }) add(fallback204)
+
+            val fallbackBaidu = "https://www.baidu.com"
+            if (none { it.equals(fallbackBaidu, ignoreCase = true) }) add(fallbackBaidu)
+        }
+
+        for (candidate in candidates) {
+            val result = measureHttpLatency(candidate, sampleCount)
+            if (result != null) return result
+        }
+        return null
+    }
+
+    private fun updateLatencySnapshot(result: LatencyProbeResult) {
+        _uiState.update { state ->
+            val maxHistory = 120
+            val updatedSeries = if (result.latencyMs > 0.0) {
+                (state.speedInfo.latencySeries + result.latencyMs).takeLast(maxHistory)
+            } else {
+                state.speedInfo.latencySeries
+            }
+            state.copy(
+                speedInfo = state.speedInfo.copy(
+                    latency = result.latencyMs,
+                    jitter = result.jitterMs,
+                    packetLoss = result.packetLossPct,
+                    latencySeries = updatedSeries
+                )
+            )
+        }
+    }
+
+    fun runLatencyTest() {
+        if (_uiState.value.isLoading) return
+        viewModelScope.launch {
+            android.util.Log.d("CpeVM", "runLatencyTest invoked")
+            _uiState.update { it.copy(isLoading = true, error = null) }
+            try {
+                val latencyUrl = _uiState.value.latencyTestUrl.ifBlank { "https://www.gstatic.com/generate_204" }
+                val result = probeLatency(latencyUrl)
+                if (result == null) {
+                    android.util.Log.w("CpeVM", "runLatencyTest failed: no result from probeLatency")
+                    throw Exception("未获取到有效的延迟数据")
+                }
+                android.util.Log.d(
+                    "CpeVM",
+                    "runLatencyTest success source=${result.source} latency=${result.latencyMs} jitter=${result.jitterMs} loss=${result.packetLossPct}"
+                )
+                updateLatencySnapshot(result)
+            } catch (e: Exception) {
+                android.util.Log.e("CpeVM", "runLatencyTest error: ${e.message.orEmpty()}")
+                _uiState.update { it.copy(error = "延迟测试失败: ${e.message.orEmpty()}") }
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
+        }
+    }
+
+    private suspend fun measureThroughputPhase(
+        phaseUrl: String,
+        threadCount: Int,
+        maxBytes: Long,
+        phaseDurationMs: Long,
+        isUpload: Boolean,
+        onSample: (instantSpeedMbps: Double, averageSpeedMbps: Double, transferredMb: Double) -> Unit
+    ): ThroughputPhaseResult = coroutineScope {
+        val bytesAtomic = java.util.concurrent.atomic.AtomicLong(0)
+        val running = java.util.concurrent.atomic.AtomicBoolean(true)
+        val startTime = System.nanoTime()
+        val client = okhttp3.OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+        val uploadPayload = if (isUpload) ByteArray(256 * 1024) { 0x5A.toByte() } else null
+
+        val jobs = (0 until threadCount).map {
+            launch(Dispatchers.IO) {
+                while (running.get() && bytesAtomic.get() < maxBytes) {
+                    runCatching {
+                        val request = if (isUpload) {
+                            okhttp3.Request.Builder()
+                                .url(phaseUrl)
+                                .post(uploadPayload!!.toRequestBody())
                                 .build()
-                            client.newCall(req).execute().use { resp ->
-                                val body = resp.body ?: return@runCatching
-                                val stream = body.source()
-                                val buf = okio.Buffer()
+                        } else {
+                            okhttp3.Request.Builder()
+                                .url(phaseUrl)
+                                .get()
+                                .build()
+                        }
+
+                        client.newCall(request).execute().use { response ->
+                            if (!response.isSuccessful) return@runCatching
+                            if (isUpload) {
+                                bytesAtomic.addAndGet(uploadPayload!!.size.toLong())
+                            } else {
+                                val body = response.body ?: return@runCatching
+                                val source = body.source()
+                                val buffer = okio.Buffer()
                                 while (running.get() && bytesAtomic.get() < maxBytes) {
-                                    val read = stream.read(buf, 8192)
+                                    val read = source.read(buffer, 8192)
                                     if (read == -1L) break
                                     bytesAtomic.addAndGet(read)
                                 }
@@ -611,71 +785,136 @@ class CpeViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             }
+        }
 
-            // 姣忕閲囨牱閫熷害
-            val sampleJob = launch {
-                var lastBytes = 0L
-                while (running.get()) {
-                    delay(1000)
-                    val currentBytes = bytesAtomic.get()
-                    val delta = currentBytes - lastBytes
-                    lastBytes = currentBytes
-                    val instantSpeed = delta * 8.0 / 1_000_000.0 // Mbps
-                    speedHistory.add(instantSpeed)
+        val sampleJob = launch {
+            var lastBytes = 0L
+            while (running.get()) {
+                delay(1000)
+                val currentBytes = bytesAtomic.get()
+                val delta = currentBytes - lastBytes
+                lastBytes = currentBytes
+                val instantSpeed = delta * 8.0 / 1_000_000.0
+                val elapsedSec = (System.nanoTime() - startTime) / 1_000_000_000.0
+                val avgSpeed = if (elapsedSec > 0) (currentBytes * 8.0 / elapsedSec) / 1_000_000.0 else 0.0
+                onSample(instantSpeed, avgSpeed, currentBytes / 1_000_000.0)
 
-                    // 瀹炴椂鏇存柊 UI
-                    val elapsedSec = (System.nanoTime() - startTime) / 1_000_000_000.0
-                    val avgSpeed = if (elapsedSec > 0) (currentBytes * 8.0 / elapsedSec) / 1_000_000.0 else 0.0
-                    val totalMB = currentBytes / 1_000_000.0
+                if (currentBytes >= maxBytes) {
+                    running.set(false)
+                }
+            }
+        }
 
+        try {
+            delay(phaseDurationMs)
+        } finally {
+            running.set(false)
+            jobs.forEach { it.join() }
+            sampleJob.join()
+        }
+
+        val totalBytes = bytesAtomic.get()
+        val totalSeconds = (System.nanoTime() - startTime) / 1_000_000_000.0
+        val finalSpeed = if (totalSeconds > 0) (totalBytes * 8.0 / totalSeconds) / 1_000_000.0 else 0.0
+        ThroughputPhaseResult(finalSpeed, totalBytes, totalSeconds)
+    }
+
+    fun runSpeedTest() {
+        // 防止重复启动
+        if (_uiState.value.isLoading) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, error = null) }
+
+            val state = _uiState.value
+            val latencyUrl = state.latencyTestUrl.ifBlank { "https://www.gstatic.com/generate_204" }
+            val speedUrl = state.speedTestUrl.ifBlank { "https://speed.cloudflare.com/__down?bytes=10485760" }
+            val uploadUrl = deriveUploadTestUrl(speedUrl)
+            val phaseDurationMs = 8_000L
+            val maxBytesPerPhase = 50_000_000L
+
+            // 重置测速状态
+            _uiState.update { s ->
+                s.copy(speedInfo = s.speedInfo.copy(
+                    download = 0.0, upload = 0.0,
+                    downloadSeries = emptyList(), uploadSeries = emptyList(),
+                    currentDownload = "", currentUpload = "", currentTotal = ""
+                ))
+            }
+
+            val latencyResult = runCatching { probeLatency(latencyUrl) }.getOrNull()
+            latencyResult?.let { updateLatencySnapshot(it) }
+
+            try {
+                val downloadPhase = measureThroughputPhase(
+                    phaseUrl = speedUrl,
+                    threadCount = speedThreadCount,
+                    maxBytes = maxBytesPerPhase,
+                    phaseDurationMs = phaseDurationMs,
+                    isUpload = false
+                ) { instantSpeed, avgSpeed, transferredMb ->
                     _uiState.update { s ->
                         val maxH = 60
                         s.copy(
                             speedInfo = s.speedInfo.copy(
                                 download = avgSpeed,
-                                latency = avgLatency,
-                                jitter = jitter,
-                                packetLoss = packetLoss,
-                                latencySeries = (s.speedInfo.latencySeries + avgLatency).takeLast(maxH),
+                                upload = 0.0,
                                 downloadSeries = (s.speedInfo.downloadSeries + instantSpeed).takeLast(maxH),
-                                uploadSeries = (s.speedInfo.uploadSeries + instantSpeed * 0.3).takeLast(maxH),
-                                currentDownload = "%.1f MB".format(totalMB)
+                                currentDownload = "%.1f MB".format(transferredMb),
+                                currentUpload = "",
+                                currentTotal = "%.1f MB".format(transferredMb)
                             )
                         )
                     }
+                }
 
-                    // 杈惧埌涓婇檺鑷姩鍋滄
-                    if (currentBytes >= maxBytes) {
-                        running.set(false)
+                val uploadPhase = measureThroughputPhase(
+                    phaseUrl = uploadUrl,
+                    threadCount = speedThreadCount,
+                    maxBytes = maxBytesPerPhase,
+                    phaseDurationMs = phaseDurationMs,
+                    isUpload = true
+                ) { instantSpeed, avgSpeed, transferredMb ->
+                    val downloadMb = downloadPhase.totalBytes / 1_000_000.0
+                    _uiState.update { s ->
+                        val maxH = 60
+                        s.copy(
+                            speedInfo = s.speedInfo.copy(
+                                download = downloadPhase.finalSpeedMbps,
+                                upload = avgSpeed,
+                                downloadSeries = s.speedInfo.downloadSeries,
+                                uploadSeries = (s.speedInfo.uploadSeries + instantSpeed).takeLast(maxH),
+                                currentDownload = "%.1f MB".format(downloadMb),
+                                currentUpload = "%.1f MB".format(transferredMb),
+                                currentTotal = "%.1f MB".format(downloadMb + transferredMb)
+                            )
+                        )
                     }
                 }
-            }
 
-            // 最多跑 15 秒
-            delay(15_000)
-            running.set(false)
-
-            // 等待所有下载线程结束
-            downloadJobs.forEach { it.join() }
-            sampleJob.join()
-
-            val totalBytes = bytesAtomic.get()
-            val totalSec = (System.nanoTime() - startTime) / 1_000_000_000.0
-            val finalSpeed = if (totalSec > 0) (totalBytes * 8.0 / totalSec) / 1_000_000.0 else 0.0
-
-            _uiState.update { s ->
-                s.copy(
-                    speedInfo = s.speedInfo.copy(
-                        download = finalSpeed,
-                        latency = avgLatency,
-                        jitter = jitter,
-                        packetLoss = packetLoss,
-                        currentDownload = "%.1f MB".format(totalBytes / 1_000_000.0),
-                        currentUpload = "-",
-                        currentTotal = "%.1f MB".format(totalBytes / 1_000_000.0)
-                    ),
-                    isLoading = false
-                )
+                _uiState.update { s ->
+                    val downloadMb = downloadPhase.totalBytes / 1_000_000.0
+                    val uploadMb = uploadPhase.totalBytes / 1_000_000.0
+                    s.copy(
+                        speedInfo = s.speedInfo.copy(
+                            download = downloadPhase.finalSpeedMbps,
+                            upload = uploadPhase.finalSpeedMbps,
+                            latency = latencyResult?.latencyMs ?: s.speedInfo.latency,
+                            jitter = latencyResult?.jitterMs ?: s.speedInfo.jitter,
+                            packetLoss = latencyResult?.packetLossPct ?: s.speedInfo.packetLoss,
+                            currentDownload = "%.1f MB".format(downloadMb),
+                            currentUpload = "%.1f MB".format(uploadMb),
+                            currentTotal = "%.1f MB".format(downloadMb + uploadMb)
+                        ),
+                        isLoading = false
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "测速失败: ${e.message.orEmpty()}"
+                    )
+                }
             }
         }
     }

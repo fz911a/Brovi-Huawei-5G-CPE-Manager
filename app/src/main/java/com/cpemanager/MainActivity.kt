@@ -175,6 +175,14 @@ private enum class AppTab(val label: String, val icon: ImageVector) {
 
 private data class SpeedRecord(val left: String, val right: String)
 
+private val BottomTabs = listOf(
+    AppTab.Settings,
+    AppTab.Pcc,
+    AppTab.Aggregation,
+    AppTab.Lock,
+    AppTab.Speed
+)
+
 private fun maskApiKey(raw: String): String {
     val key = raw.trim()
     if (key.isBlank()) return "sk-********************"
@@ -274,7 +282,7 @@ private fun BottomBar(tab: AppTab, onSelect: (AppTab) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        AppTab.values().forEach { item ->
+        BottomTabs.forEach { item ->
             val selected = item == tab
             val selectedTone = if (selected && item == AppTab.Lock) Indigo else if (selected) Green else TextSecondary
             val selectedBg = when {
@@ -1720,6 +1728,18 @@ private fun LockScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
     }
 }
 
+private fun chartAxisMax(values: List<Double>, minimum: Double): Double {
+    val rawMax = values.maxOrNull() ?: 0.0
+    val padded = maxOf(minimum, rawMax * 1.25)
+    val step = when {
+        padded <= 20 -> 5.0
+        padded <= 60 -> 10.0
+        padded <= 200 -> 20.0
+        else -> 50.0
+    }
+    return kotlin.math.ceil(padded / step) * step
+}
+
 @Composable
 private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
     val speed = uiState.speedInfo
@@ -1732,6 +1752,8 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
     val currentDuration = speed.duration.ifBlank { "--" }
     val totalDuration = speed.totalConnectDuration.ifBlank { "--" }
     val trafficVisible = speed.trafficVisible.ifBlank { "同步中" }
+    val latencyAxisMax = chartAxisMax(speed.latencySeries, 60.0)
+    val throughputAxisMax = chartAxisMax(speed.downloadSeries + speed.uploadSeries, 10.0)
     val records = listOf(
         SpeedRecord("当前下载 $currentDownload", "当前上传 $currentUpload"),
         SpeedRecord("会话总量 $currentTotal", "会话时长 $currentDuration"),
@@ -1740,7 +1762,10 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
 
     Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         Header(title = "速率", subtitle = "实时吞吐与体验") {
-            Chip("${"%.1f".format(speed.download)} Mbps", BlueSoft, Blue)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Chip("${"%.1f".format(speed.download)} Mbps", BlueSoft, Blue)
+                Chip("${"%.1f".format(speed.upload)} Mbps", PurpleSoft, Purple)
+            }
         }
 
         AppCard(shape = 20.dp, padding = 14.dp, borderColor = Color(0xFFE6E9EF), elevation = 3.dp) {
@@ -1768,11 +1793,25 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
                         Text("$threadCount", color = Purple, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
                     }
                 }
-                Row(horizontalArrangement = Arrangement.End, modifier = Modifier.fillMaxWidth()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlineAction(
+                        if (uiState.isLoading) "测延迟中..." else "测延迟",
+                        Icons.Rounded.Timer,
+                        Modifier.weight(1f)
+                    ) {
+                        if (!uiState.isLoading) viewModel.runLatencyTest()
+                    }
+                    OutlineAction(
+                        "同步数据",
+                        Icons.Rounded.Refresh,
+                        Modifier.weight(1f)
+                    ) {
+                        if (!uiState.isLoading) viewModel.refreshDashboard()
+                    }
                     PrimaryAction(
                         if (uiState.isLoading) "测速中..." else "开始测速",
                         Icons.Rounded.PlayArrow,
-                        Modifier
+                        Modifier.weight(1f)
                     ) {
                         if (!uiState.isLoading) viewModel.runSpeedTest()
                     }
@@ -1816,7 +1855,32 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
                     }
                 }
 
-                Text("延迟: ${uiState.latencyTestUrl.take(40)}...", color = TextSecondary.copy(alpha = 0.6f), fontSize = 9.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        "延迟: ${uiState.latencyTestUrl.take(40)}...",
+                        color = TextSecondary.copy(alpha = 0.6f),
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        "上传测速会自动推导上行端点，支持下载 / 上传双向测试。",
+                        color = TextSecondary.copy(alpha = 0.6f),
+                        fontSize = 9.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                if (uiState.error?.isNotBlank() == true) {
+                    Text(
+                        uiState.error.orEmpty(),
+                        color = Red,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
 
             Spacer(Modifier.height(10.dp))
@@ -1938,7 +2002,11 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
                         verticalArrangement = Arrangement.SpaceBetween,
                         horizontalAlignment = Alignment.End
                     ) {
-                        listOf("60", "30", "0").forEachIndexed { idx, text ->
+                        listOf(
+                            latencyAxisMax.toInt().toString(),
+                            (latencyAxisMax / 2).toInt().toString(),
+                            "0"
+                        ).forEachIndexed { idx, text ->
                             Text(text, color = if (idx == 2) TextPrimary else TextSecondary, fontSize = 10.sp, fontWeight = if (idx == 2) FontWeight.ExtraBold else FontWeight.Bold)
                         }
                     }
@@ -1949,7 +2017,7 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
                     secondaryValues = emptyList(),
                     secondaryColor = Color(0xFF06B6D4),
                     yMin = 0.0,
-                    yMax = 60.0,
+                    yMax = latencyAxisMax,
                     modifier = Modifier.weight(1f).height(100.dp),
                     highlightDots = true
                 )
@@ -1989,7 +2057,11 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
                         verticalArrangement = Arrangement.SpaceBetween,
                         horizontalAlignment = Alignment.End
                     ) {
-                        listOf("10", "5", "0").forEachIndexed { idx, text ->
+                        listOf(
+                            throughputAxisMax.toInt().toString(),
+                            (throughputAxisMax / 2).toInt().toString(),
+                            "0"
+                        ).forEachIndexed { idx, text ->
                             Text(text, color = if (idx == 2) TextPrimary else TextSecondary, fontSize = 10.sp, fontWeight = if (idx == 2) FontWeight.ExtraBold else FontWeight.Bold)
                         }
                     }
@@ -1997,8 +2069,10 @@ private fun SpeedScreen(viewModel: CpeViewModel, uiState: CpeUiState) {
                 FixedScaleLinePlot(
                     values = speed.downloadSeries,
                     color = Blue,
+                    secondaryValues = speed.uploadSeries,
+                    secondaryColor = Purple,
                     yMin = 0.0,
-                    yMax = 10.0,
+                    yMax = throughputAxisMax,
                     modifier = Modifier.weight(1f).height(100.dp),
                     highlightDots = true
                 )

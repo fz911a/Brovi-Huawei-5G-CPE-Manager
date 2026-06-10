@@ -111,6 +111,9 @@ object HuaweiCpeClient {
     suspend fun getTrafficStats(): Result<Map<String, String>> = get("monitoring/traffic-statistics")
     suspend fun getSystemLog(): Result<Map<String, String>> = get("log/loginfo")
     suspend fun getDiagnosePingResult(): Result<Map<String, String>> = get("diagnosis/diagnose_ping")
+    suspend fun getDiagnoseWanServiceName(): Result<Map<String, String>> = get("diagnosis/get-wan-service-name")
+    suspend fun requestDiagnosePing(params: Map<String, String>): Result<Map<String, String>> =
+        post("diagnosis/diagnose_ping", params)
     suspend fun getCurrentPlmn(): Result<Map<String, String>> = get("net/current-plmn")
     suspend fun getNetMode(): Result<Map<String, String>> = get("net/net-mode")
     suspend fun getSecCellInfo(): Result<Map<String, String>> = get("device/seccellinfo")
@@ -122,7 +125,6 @@ object HuaweiCpeClient {
     suspend fun getAntennaSetType(): Result<Map<String, String>> = get("device/antenna_set_type")
     suspend fun getAntennaConfiguration(): Result<Map<String, String>> = get("net/antenna-configuration")
     suspend fun getWlanDebug(): Result<Map<String, String>> = get("wlan/wlan-debug")
-    
     /**
      * 刷新 token 队列 - 开发者模式登录后调用，确保新的开发者权限生效
      * 重要：开发者模式登录已经从响应头中捕获了新的 token 和 SessionID
